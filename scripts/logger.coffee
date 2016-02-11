@@ -1,16 +1,23 @@
-cron = (require 'cron').CronJob
-solr = (require 'solr-client').createClient(host: process.env['SOLR_HOST'], core: process.env['SOLR_CORE'])
+moment =  require 'moment'
+async  =  require 'async'
+mysql  =  require 'mysql-activerecord'
+cron   = (require 'cron').CronJob
 {Listener} = require 'hubot'
 {SlackRawMessage} = require 'hubot-slack'
 
-SLACK_HOME = process.env['SLACK_HOME']
 USER_MENTIONS_REGEX = /@[A-z0-9_-]+/g
 
-module.exports = (robot) ->
+db = new mysql.Adapter(
+  server: process.env['MYSQL_HOST'],
+  username: process.env['MYSQL_USER'],
+  password: process.env['MYSQL_PASS'],
+  database: process.env['MYSQL_DATABASE'],
+  reconnectTimeout: 2000
+)
 
-  new cron '0 30 * * * *', ->
-    solr.optimize()
-  , null, true, 'Asia/Tokyo'
+module.exports = (robot) ->
+  robot.hear //, (msg) ->
+    onMessage(msg.message)
 
   # Warning: Use hubot and hubot-slack private functions
   robot.listeners.push new Listener(
@@ -24,37 +31,57 @@ module.exports = (robot) ->
         user:
           name: msg.message.rawMessage._client.users[msg.message.rawMessage.message.user].name
         text: msg.message.rawMessage.message.text
-      onMessage(message)
+      onMessageEdited(message)
     )
   )
 
-  robot.hear //, (msg) ->
-    onMessage(msg.message)
-
   onMessage = (message) ->
-    mentions = message.text.match(USER_MENTIONS_REGEX)
+    mention_users = (user.substr(1) for user in message.text.match(USER_MENTIONS_REGEX))
     columns =
-      id: message.id
+      pid: message.id
       room: message.room
       user: message.user.name
-      mention_user: if mentions? then (mention.substr(1) for mention in mentions) else []
       message: message.text
-    solr.add columns, (err, obj) ->
-      console.log err if err?
+      timestamp: moment().unix(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
+      created_at: moment().unix(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
+      updated_at: moment().unix(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
 
-  robot.hear /log\s+search\s+([^\s]+)(\s+(.+))?/, (msg) ->
-    query = solr.createQuery()
-      .q(msg.match[1])
-      .start(0)
-      .rows(2)
-      .sort(timestamp: 'desc');
+    db.insert('slack_messages', columns, (err, info) ->
+      return console.log 'ERR', err if err?
+      async.each(mention_users, (user, callback) ->
+        user_columns =
+          message_id: info.insertId
+          user: user
+          created_at: moment().format("YYYY-MM-DD HH:mm:ss")
+          updated_at: moment().format("YYYY-MM-DD HH:mm:ss")
+        db.insert('slack_message_mentions', user_columns, callback)
+      )
+    )
 
-    # fq inject
-    query.parameters.push 'fq=' + msg.match[3] if msg.match[3]?
+  onMessageEdited = (message) ->
+    mention_users = (user.substr(1) for user in message.text.match(USER_MENTIONS_REGEX))
+    columns =
+      pid: message.id
+      room: message.room
+      user: message.user.name
+      message: message.text
+      updated_at: moment().unix(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
 
-    solr.search query, (err, obj) ->
-      console.log err if err?
-      return if obj.response.numFound <= 0
-
-      for doc in obj.response.docs
-        msg.send("#{doc.user} in #{doc.room}: #{doc.message}\n#{SLACK_HOME}/archives/#{doc.room}/p#{doc.id.replace(/\./, '')}")
+    db.where(pid: columns.pid).get('slack_messages', (err, info) ->
+      return console.log 'ERR', err if err?
+      message = info[0]
+      db.where(id: message.id).update('slack_messages', columns, (err) ->
+        return console.log 'ERR', err if err?
+        db.where(message_id: message.id).delete('slack_messages', (err) ->
+          return console.log 'ERR', err if err?
+          async.each(mention_users, (user, callback) ->
+            user_columns =
+              message_id: message.id
+              user: user
+              created_at: moment().format("YYYY-MM-DD HH:mm:ss")
+              updated_at: moment().format("YYYY-MM-DD HH:mm:ss")
+            db.insert('slack_message_mentions', user_columns, callback)
+          )
+        )
+      )
+    )

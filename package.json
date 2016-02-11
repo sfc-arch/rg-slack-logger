@@ -5,6 +5,7 @@
   "author": "Yusei Yamanaka <miyukki@sfc.wide.ad.jp>",
   "description": "I am log man",
   "dependencies": {
+    "async": "^1.5.2",
     "cron": "^1.0.9",
     "hubot": "^2.13.2",
     "hubot-diagnostics": "0.0.1",
@@ -20,6 +21,8 @@
     "hubot-shipit": "^0.2.0",
     "hubot-slack": "^3.3.0",
     "hubot-youtube": "^1.0.0",
+    "moment": "^2.11.2",
+    "mysql-activerecord": "^0.8.6",
     "solr-client": "^0.5.0"
   },
   "engines": {
