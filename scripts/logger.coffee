@@ -36,7 +36,6 @@ module.exports = (robot) ->
   )
 
   onMessage = (message) ->
-    mention_users = (user.substr(1) for user in message.text.match(USER_MENTIONS_REGEX))
     columns =
       pid: message.id
       room: message.room
@@ -48,6 +47,9 @@ module.exports = (robot) ->
 
     db.insert('slack_messages', columns, (err, info) ->
       return console.log 'ERR', err if err?
+      mention_users = message.text.match(USER_MENTIONS_REGEX)
+      return unless mention_users?
+      mention_users = (user.substr(1) for user in mention_users)
       async.each(mention_users, (user, callback) ->
         user_columns =
           message_id: info.insertId
@@ -72,6 +74,9 @@ module.exports = (robot) ->
       message = info[0]
       db.where(id: message.id).update('slack_messages', columns, (err) ->
         return console.log 'ERR', err if err?
+        mention_users = message.text.match(USER_MENTIONS_REGEX)
+        return unless mention_users?
+        mention_users = (user.substr(1) for user in mention_users)
         db.where(message_id: message.id).delete('slack_messages', (err) ->
           return console.log 'ERR', err if err?
           async.each(mention_users, (user, callback) ->
