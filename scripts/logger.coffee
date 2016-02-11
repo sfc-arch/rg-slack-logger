@@ -41,9 +41,9 @@ module.exports = (robot) ->
       room: message.room
       user: message.user.name
       message: message.text
-      timestamp: moment().unix(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
-      created_at: moment().unix(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
-      updated_at: moment().unix(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
+      timestamp: moment(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
+      created_at: moment(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
+      updated_at: moment(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
 
     db.insert('slack_messages', columns, (err, info) ->
       return console.log 'ERR', err if err?
@@ -67,7 +67,6 @@ module.exports = (robot) ->
       room: message.room
       user: message.user.name
       message: message.text
-      updated_at: moment().unix(message.timestamp).format("YYYY-MM-DD HH:mm:ss")
 
     db.where(pid: columns.pid).get('slack_messages', (err, info) ->
       return console.log 'ERR', err if err?
